@@ -1,0 +1,6 @@
+logs
+minio
+*.pyc
+*.meta
+
+.env

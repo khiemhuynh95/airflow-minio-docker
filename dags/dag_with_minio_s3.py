@@ -6,8 +6,8 @@ from airflow.providers.amazon.aws.sensors.s3_key import S3KeySensor
 
 default_args = {
     'owner': 'coder2j',
-    'retries': 5,
-    'retry_delay': timedelta(minutes=10)
+    'retries': 2,
+    'retry_delay': timedelta(minutes=1)
 }
 
 

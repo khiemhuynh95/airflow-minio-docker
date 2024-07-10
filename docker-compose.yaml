@@ -59,6 +59,23 @@ x-airflow-common:
       condition: service_healthy
 
 services:
+  minio:
+    image: quay.io/minio/minio
+    volumes:
+        - ${PWD}/minio:/data
+    env_file: .env
+    command: server /data --console-address ":9001"
+    restart: always # necessary since it's failing to start sometimes
+    ports:
+        - "9000:9000"
+        - "9001:9001"
+    networks:
+      - my_docker
+    healthcheck:
+        test: ["CMD", "curl", "-f", "http://host.docker.internal:9000/minio/health/live"]
+        interval: 30s
+        timeout: 20s
+        retries: 3
   postgres:
     image: postgres:13
     environment:
@@ -81,7 +98,7 @@ services:
     ports:
       - 8080:8080
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "--fail", "http://host.docker.internal:8080/health"]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -104,3 +121,5 @@ services:
 
 volumes:
   postgres-db-volume:
+networks:
+  my_docker:
