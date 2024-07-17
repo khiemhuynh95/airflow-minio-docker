@@ -1,6 +1,7 @@
 from minio import Minio
 from airflow.hooks.base import BaseHook
 import json
+import os
 class MinioHook:
     def __init__(self, connection_id: str, secure: bool = False):
         self.connection_id = connection_id
@@ -40,6 +41,27 @@ class MinioHook:
             print(f"File {object_name} from bucket {bucket_name} downloaded to {local_file_path}")
         except Exception as e:
             print(f"Failed to download file: {e}")
+            raise
+        
+    def upload_file(self, bucket_name: str, object_name: str, local_file_path: str):
+        try:
+            self.client.fput_object(bucket_name, object_name, local_file_path)
+            print(f"File {local_file_path} uploaded to bucket {bucket_name} as {object_name}")
+        except Exception as e:
+            print(f"Failed to upload file: {e}")
+            raise
+        
+    def upload_folder(self, bucket_name: str, folder_path: str, destination_folder: str, pattern = '.csv'):
+        try:
+            for root, _, files in os.walk(folder_path):
+                for file in files:
+                    if file.endswith('.csv'):
+                        print(f"Uploading {file}")
+                        local_file_path = os.path.join(root, file)
+                        object_name = f"{destination_folder}/{os.path.relpath(local_file_path, folder_path)}"
+                        self.upload_file(bucket_name, object_name, local_file_path)
+        except Exception as e:
+            print(f"Failed to upload folder: {e}")
             raise
 
 # Example usage:
