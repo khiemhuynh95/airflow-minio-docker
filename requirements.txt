@@ -1,9 +1,13 @@
 apache-airflow==2.7.3
+#s3
 apache-airflow-providers-amazon
+minio
+#kafka
 confluent-kafka==2.1.1
 apache-airflow-providers-apache-kafka==1.0.0
+#spark
 pyspark
-minio
+
 bs4
 scikit-learn==0.24.2
 matplotlib==3.3.3

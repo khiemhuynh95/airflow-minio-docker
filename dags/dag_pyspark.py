@@ -6,32 +6,37 @@ from hooks.minio_hook import MinioHook
 from airflow.providers.amazon.aws.sensors.s3 import S3KeySensor
 import os
 import shutil
-
+from airflow.providers.apache.kafka.operators.consume import ConsumeFromTopicOperator
 from airflow.decorators import task
+import json
+from confluent_kafka import Consumer, KafkaException
 # params = {
-#     "connection_id": "minio_conn",
+
 #     "bucket_name": "airflow",
 #     "bucket_key": "Orders.csv",
 #     "date": "2022-06-02"
 # }
-
+KAFKA_TOPIC = "mytopic"
+MAX_MSG = 1
 minio_client = MinioHook(connection_id="minio_conn")
 
 def test_s3_connection():
     minio_client.test_connection()
 
-def download_csv_file(ti, **context):
-    print(context)
-    filename = context["params"]["bucket_key"].split('//')[-1]
+def download_csv_file(ti):
+
+    data = ti.xcom_pull(key='data', task_ids='consume_latest_message')
+    filename = data['key'].split('//')[-1]
     local_filepath = f'/tmp/{filename}'
+    
+    minio_client.download_file(data["bucket_name"], data["key"], local_filepath)
     ti.xcom_push(key='input_file_path', value=local_filepath)
     
-    minio_client.download_file(context["params"]["bucket_name"], context["params"]["bucket_key"], local_filepath)
-    
 def upload_output_file_s3(ti, **context):
+    data = ti.xcom_pull(key='data', task_ids='consume_latest_message')
     temp_folder = ti.xcom_pull(key='output_folder', task_ids='process_csv_file')
     # Upload output csv file to s3 bucket
-    minio_client.upload_folder(context["params"]["bucket_name"], temp_folder, f"ecomerce/orders/{ti.xcom_pull(key='date', task_ids='process_csv_file')}")
+    minio_client.upload_folder(data["bucket_name"], temp_folder, f"ecomerce/orders/{data['date']}")
 
 def remove_temp_files(ti):
     os.remove(ti.xcom_pull(key='input_file_path', task_ids='download_csv_file'))
@@ -46,15 +51,46 @@ def process_csv_file(ti, **context):
 
     df.show()
     # get snapshot date
-    snapshot_date = context["params"]["date"] if "date" in context["params"] else context["ds"]
+    data = ti.xcom_pull(key='data', task_ids='consume_latest_message')
+
+    snapshot_date = data["date"] if "date" in data else context["ds"]
 
     # Filter the DataFrame by the snapshot date
     temp_path = f'/tmp/orders/{snapshot_date}'
     df[df["date"] == snapshot_date].write.csv(temp_path, mode="overwrite")
     
     ti.xcom_push(key='output_folder', value=temp_path)
-    ti.xcom_push(key='date', value=snapshot_date)
     spark.stop()
+
+def consume_latest_message(ti):
+    conf = {
+        'bootstrap.servers': 'host.docker.internal:9092',  # Replace with your Kafka server(s)
+        'group.id': 'mygroup',  # Consumer group id
+        'auto.offset.reset': 'latest'
+    }
+    
+    consumer = Consumer(conf)
+
+    try:
+        consumer.subscribe([KAFKA_TOPIC])  # Replace with your topic name
+        max_msg = MAX_MSG
+        while max_msg > 0:
+            msg = consumer.poll(timeout=1.0)  # Poll for the latest message
+            if msg is None:
+                print("No message received.")
+            elif msg.error():
+                if msg.error().code() == KafkaException._PARTITION_EOF:
+                    print(f"End of partition reached {msg.partition()}")
+                else:
+                    raise KafkaException(msg.error())
+            else:
+                max_msg -= 1
+                payload = json.loads(msg.value().decode())
+                print(f"Consumed message: {payload}")
+                ti.xcom_push(key='data', value=payload)
+    finally:
+        consumer.close()
+
 
 with DAG(
     dag_id='pyspark_example', 
@@ -66,7 +102,12 @@ with DAG(
         task_id='test_s3_connection',
         python_callable=test_s3_connection
     )
-
+    
+    consume_kafka_task = PythonOperator(
+        task_id='consume_latest_message',
+        python_callable=consume_latest_message
+    )
+    
     download_csv_file_task = PythonOperator(
         task_id='download_csv_file',
         python_callable=download_csv_file
@@ -87,5 +128,5 @@ with DAG(
         python_callable=remove_temp_files
     )
 
-    test_s3_connection_task >> download_csv_file_task >> process_csv_file_task >> upload_output_file_task >> clean_up_task
+    test_s3_connection_task >> consume_kafka_task >> download_csv_file_task >> process_csv_file_task >> upload_output_file_task >> clean_up_task
     
