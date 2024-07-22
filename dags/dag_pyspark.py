@@ -3,13 +3,12 @@ from airflow.operators.python_operator import PythonOperator
 from pyspark.sql import SparkSession
 from datetime import datetime
 from hooks.minio_hook import MinioHook
+from hooks.kafka_consumer_hook import KafkaConsumerHook
 from airflow.providers.amazon.aws.sensors.s3 import S3KeySensor
 import os
 import shutil
-from airflow.providers.apache.kafka.operators.consume import ConsumeFromTopicOperator
-from airflow.decorators import task
 import json
-from confluent_kafka import Consumer, KafkaException
+
 # params = {
 
 #     "bucket_name": "airflow",
@@ -68,29 +67,13 @@ def consume_latest_message(ti):
         'group.id': 'mygroup',  # Consumer group id
         'auto.offset.reset': 'latest'
     }
-    
-    consumer = Consumer(conf)
-
-    try:
-        consumer.subscribe([KAFKA_TOPIC])  # Replace with your topic name
-        max_msg = MAX_MSG
-        while max_msg > 0:
-            msg = consumer.poll(timeout=1.0)  # Poll for the latest message
-            if msg is None:
-                print("No message received.")
-            elif msg.error():
-                if msg.error().code() == KafkaException._PARTITION_EOF:
-                    print(f"End of partition reached {msg.partition()}")
-                else:
-                    raise KafkaException(msg.error())
-            else:
-                max_msg -= 1
-                payload = json.loads(msg.value().decode())
-                print(f"Consumed message: {payload}")
-                ti.xcom_push(key='data', value=payload)
-    finally:
-        consumer.close()
-
+    kafka_consumer = KafkaConsumerHook(
+        conf=conf,
+        topic=KAFKA_TOPIC
+    )
+    #return the list of msgs
+    msgs = kafka_consumer.consume_messages(max_records=1)
+    ti.xcom_push(key='data', value=msgs[0])
 
 with DAG(
     dag_id='pyspark_example', 
