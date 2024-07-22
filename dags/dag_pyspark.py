@@ -9,12 +9,6 @@ import os
 import shutil
 import json
 
-# params = {
-
-#     "bucket_name": "airflow",
-#     "bucket_key": "Orders.csv",
-#     "date": "2022-06-02"
-# }
 KAFKA_TOPIC = "mytopic"
 MAX_MSG = 1
 minio_client = MinioHook(connection_id="minio_conn")
@@ -23,7 +17,11 @@ def test_s3_connection():
     minio_client.test_connection()
 
 def download_csv_file(ti):
-
+    # data = {
+    #     "bucket_name": "airflow",
+    #     "bucket_key": "Orders.csv",
+    #     "date": "2022-06-02"
+    # }
     data = ti.xcom_pull(key='data', task_ids='consume_latest_message')
     filename = data['key'].split('//')[-1]
     local_filepath = f'/tmp/{filename}'
@@ -31,7 +29,7 @@ def download_csv_file(ti):
     minio_client.download_file(data["bucket_name"], data["key"], local_filepath)
     ti.xcom_push(key='input_file_path', value=local_filepath)
     
-def upload_output_file_s3(ti, **context):
+def upload_output_file_s3(ti):
     data = ti.xcom_pull(key='data', task_ids='consume_latest_message')
     temp_folder = ti.xcom_pull(key='output_folder', task_ids='process_csv_file')
     # Upload output csv file to s3 bucket
@@ -111,5 +109,4 @@ with DAG(
         python_callable=remove_temp_files
     )
 
-    test_s3_connection_task >> consume_kafka_task >> download_csv_file_task >> process_csv_file_task >> upload_output_file_task >> clean_up_task
-    
+    [test_s3_connection_task, consume_kafka_task] >> download_csv_file_task >> process_csv_file_task >> upload_output_file_task >> clean_up_task
