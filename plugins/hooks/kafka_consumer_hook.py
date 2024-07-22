@@ -29,9 +29,9 @@ class KafkaConsumerHook:
                     payload = json.loads(msg.value().decode())
                     print(f"Consumed message: {payload}")
                     msgs.append(payload)
-                return msgs
         finally:
             consumer.close()
+        return msgs
 
 # Example usage:
 # conf = {
