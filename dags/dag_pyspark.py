@@ -8,7 +8,7 @@ from airflow.providers.amazon.aws.sensors.s3 import S3KeySensor
 import os
 import shutil
 import json
-
+from airflow.operators.email_operator import EmailOperator
 KAFKA_TOPIC = "mytopic"
 MAX_MSG = 1
 minio_client = MinioHook(connection_id="minio_conn")
@@ -109,4 +109,11 @@ with DAG(
         python_callable=remove_temp_files
     )
 
-    [test_s3_connection_task, consume_kafka_task] >> download_csv_file_task >> process_csv_file_task >> upload_output_file_task >> clean_up_task
+    send_email_task = EmailOperator(
+        task_id='send_email',
+        to='khiemhuynh952@gmail.com',
+        subject='Airflow Alert',
+        html_content=""" <h3>Pyspark Dag Success Test</h3> """
+    )
+
+    [test_s3_connection_task, consume_kafka_task] >> download_csv_file_task >> process_csv_file_task >> upload_output_file_task >> clean_up_task >> send_email_task
