@@ -5,18 +5,18 @@ class KafkaConsumerHook:
     def __init__(self, conf, topic):
         self.conf = conf
         self.topic = topic
-
+        
     def get_consumer(self):
         return Consumer(self.conf)
 
-    def consume_messages(self, max_records=1):
+    def consume_messages(self, max_records=1, poll_timeout=10.0):
         consumer = self.get_consumer()
         msgs = []
         try:
             consumer.subscribe([self.topic])
             remaining_records = max_records
             while remaining_records > 0:
-                msg = consumer.poll(timeout=1.0)
+                msg = consumer.poll(timeout=poll_timeout)
                 if msg is None:
                     print("No message received.")
                 elif msg.error():
