@@ -120,15 +120,19 @@ services:
     command: scheduler
     restart: always
 
+  airflow-triggerer:
+    <<: *airflow-common
+    command: triggerer
+    restart: always
+
   airflow-init:
     <<: *airflow-common
     command: version
+    env_file: .env
     environment:
       <<: *airflow-common-env
       _AIRFLOW_DB_UPGRADE: 'true'
       _AIRFLOW_WWW_USER_CREATE: 'true'
-      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
-      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
 
   zookeeper:
     image: confluentinc/cp-zookeeper
