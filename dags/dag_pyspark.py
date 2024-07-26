@@ -22,7 +22,7 @@ def download_csv_file(ti):
     #     "bucket_key": "Orders.csv",
     #     "date": "2022-06-02"
     # }
-    data = ti.xcom_pull(key='data', task_ids='consume_latest_message')
+    data = ti.xcom_pull(key='data', task_ids='parse_message')
     filename = data['key'].split('//')[-1]
     local_filepath = f'/tmp/{filename}'
     
@@ -30,7 +30,7 @@ def download_csv_file(ti):
     ti.xcom_push(key='input_file_path', value=local_filepath)
     
 def upload_output_file_s3(ti):
-    data = ti.xcom_pull(key='data', task_ids='consume_latest_message')
+    data = ti.xcom_pull(key='data', task_ids='parse_message')
     temp_folder = ti.xcom_pull(key='output_folder', task_ids='process_csv_file')
     # Upload output csv file to s3 bucket
     minio_client.upload_folder(data["bucket_name"], temp_folder, f"ecomerce/orders/{data['date']}")
@@ -48,7 +48,7 @@ def process_csv_file(ti, **context):
 
     df.show()
     # get snapshot date
-    data = ti.xcom_pull(key='data', task_ids='consume_latest_message')
+    data = ti.xcom_pull(key='data', task_ids='parse_message')
 
     snapshot_date = data["date"] if "date" in data else context["ds"]
 
@@ -59,19 +59,9 @@ def process_csv_file(ti, **context):
     ti.xcom_push(key='output_folder', value=temp_path)
     spark.stop()
 
-def consume_latest_message(ti):
-    conf = {
-        'bootstrap.servers': 'host.docker.internal:9092',  # Replace with your Kafka server(s)
-        'group.id': 'mygroup',  # Consumer group id
-        'auto.offset.reset': 'latest'
-    }
-    kafka_consumer = KafkaConsumerHook(
-        conf=conf,
-        topic=KAFKA_TOPIC
-    )
-    #return the list of msgs
-    msgs = kafka_consumer.consume_messages(max_records=1)
-    ti.xcom_push(key='data', value=msgs[0])
+def parse_message(ti, **context):
+    print(f"CONTEXT {context['params']['message']}")
+    ti.xcom_push(key='data', value=context['params']['message'])
 
 with DAG(
     dag_id='pyspark_example', 
@@ -84,9 +74,9 @@ with DAG(
         python_callable=test_s3_connection
     )
     
-    consume_kafka_task = PythonOperator(
-        task_id='consume_latest_message',
-        python_callable=consume_latest_message
+    parse_message_task = PythonOperator(
+        task_id='parse_message',
+        python_callable=parse_message
     )
     
     download_csv_file_task = PythonOperator(
@@ -116,4 +106,4 @@ with DAG(
         html_content=""" <h3>Pyspark Dag Success Test</h3> """
     )
 
-    [test_s3_connection_task, consume_kafka_task] >> download_csv_file_task >> process_csv_file_task >> upload_output_file_task >> clean_up_task >> send_email_task
+    [test_s3_connection_task, parse_message_task] >> download_csv_file_task >> process_csv_file_task >> upload_output_file_task >> clean_up_task >> send_email_task

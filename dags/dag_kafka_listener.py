@@ -1,82 +1,49 @@
-"""
-### Continuously Listen to a Kafka Topic for a Specific Message
-
-This DAG will always run and asynchronously monitor a Kafka topic for a message
-which causes the funtion supplied to the `apply_function` parameter to return a value.
-If a value is returned by the `apply_function`, the `event_triggered_function` is
-executed. Afterwards the task will go into a deferred state again.
-"""
-
-from airflow.decorators import dag
-from pendulum import datetime
-from airflow.providers.apache.kafka.sensors.kafka import (
-    AwaitMessageTriggerFunctionSensor,
-)
-from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 import json
-import uuid
+import random
+import string
 
-PET_MOODS_NEEDING_A_WALK = ["zoomy", "bouncy"]
-KAFKA_TOPIC = "dummy_topic"
+from pendulum import datetime
 
+from airflow import DAG
 
-def listen_function(message, pet_moods_needing_a_walk=[]):
-    """Checks if the message received indicates a pet is in
-    a mood listed in `pet_moods_needing_a_walk` when they received the last
-    treat of a treat-series."""
+# Connections needed for this example dag to finish
+from airflow.models import Connection
 
-    message_content = json.loads(message.value())
-    print(f"Full message: {message_content}")
-    pet_name = message_content["pet_name"]
-    pet_mood_post_treat = message_content["pet_mood_post_treat"]
-    final_treat = message_content["final_treat"]
-    if final_treat:
-        if pet_mood_post_treat in pet_moods_needing_a_walk:
-            return pet_name, pet_mood_post_treat
+# This is just for setting up connections in the demo - you should use standard
+# methods for setting these connections in production
+from airflow.operators.python import PythonOperator
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
+from airflow.providers.apache.kafka.sensors.kafka import AwaitMessageTriggerFunctionSensor
 
+from airflow.utils import db
+KAFKA_TOPIC = "mytopic"
 
-def event_triggered_function(message, **context):
-    "Kicks off a downstream DAG with conf and waits for its completion."
-
-    pet_name = message[0]
-    pet_mood_post_treat = message[1]
-    print(
-        f"Due to {pet_name} being in a {pet_mood_post_treat} mood, a walk is being initiated..."
-    )
-    # use the TriggerDagRunOperator (TDRO) to kick off a downstream DAG
-    TriggerDagRunOperator(
-        trigger_dag_id="walking_my_pet",
-        task_id=f"triggered_downstream_dag_{uuid.uuid4()}",
-        wait_for_completion=True,  # wait for downstream DAG completion
-        conf={
-            "pet_name": pet_name
-        },  # this information will be passed to the downstream DAG
-        poke_interval=20,
-    ).execute(context)
-
-    print(f"The walk has concluded and {pet_name} is now happily taking a nap!")
-
-
-@dag(
-    start_date=datetime(2023, 4, 1),
+with DAG(
+    dag_id="pyspark_kafka_listener",
+    description="listen for messages to process data with pyspark",
+    start_date=datetime(2022, 11, 1),
+    catchup=False,
     schedule="@continuous",
     max_active_runs=1,
-    catchup=False,
-    render_template_as_native_obj=True,
-)
-def listen_to_the_stream():
-    AwaitMessageTriggerFunctionSensor(
-        task_id="listen_for_mood",
-        kafka_config_id="kafka_listener",
+    # tags=["fizz", "buzz"],
+):
+    def await_function(message):
+        return json.loads(message.value())
+
+    def pick_downstream_dag(message, **context):
+        print(f"MSG: {message}")
+        trigger = TriggerDagRunOperator(
+            task_id="trigger_pyspark_example",
+            trigger_dag_id="pyspark_example",
+            conf={"message": message}
+        )
+        trigger.execute(context=context)
+
+    # [START howto_sensor_await_message_trigger_function]
+    listen_for_message = AwaitMessageTriggerFunctionSensor(
+        kafka_config_id="pyspark_kafka_listener",
+        task_id="listen_for_message",
         topics=[KAFKA_TOPIC],
-        # the apply function will be used from within the triggerer, this is
-        # why it needs to be a dot notation string
-        apply_function="listen_to_the_stream.listen_function",
-        poll_interval=5,
-        poll_timeout=1,
-        apply_function_kwargs={"pet_moods_needing_a_walk": PET_MOODS_NEEDING_A_WALK},
-        event_triggered_function=event_triggered_function,
+        apply_function="dag_kafka_listener.await_function",
+        event_triggered_function=pick_downstream_dag,
     )
-
-
-listen_to_the_stream()

@@ -61,7 +61,7 @@ def on_delivery(err, msg):
         print(f"Message delivered to {msg.topic()} [{msg.partition()}]")
         #make api to trigger pyspark dag
         print(f'value: {msg.value().decode()}')
-        trigger_dag('http://127.0.0.1:8080', 'pyspark_example')
+        #trigger_dag('http://127.0.0.1:8080', 'pyspark_example')
         
 @app.route('/api/kafka', methods=['POST'])
 def post_to_kafka():
