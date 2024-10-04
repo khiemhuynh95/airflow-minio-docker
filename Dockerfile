@@ -10,6 +10,18 @@ RUN apt update && \
 ENV JAVA_HOME /usr/lib/jvm/java-11-openjdk-amd64/
 RUN export JAVA_HOME
 
+# Install dependencies
+RUN apt-get update && apt-get install -y wget ca-certificates
+RUN apt-get install -y libpango-1.0-0 libxkbcommon0 xdg-utils fonts-liberation libgbm1
+
+# Download and install Chrome
+RUN wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+RUN dpkg -i google-chrome-stable_current_amd64.deb 
+
+# Set the default command
+CMD ["google-chrome", "--version"]
+
+
 USER airflow
 # Install Python deps
 COPY requirements.txt /requirements.txt

@@ -204,7 +204,7 @@ services:
     container_name: kafka-ui-1
     image: provectuslabs/kafka-ui:latest
     ports:
-      - 8888:8080 # Changed to avoid port clash with akhq
+      - 18888:18080 # Changed to avoid port clash with akhq
     depends_on:
       - kafka
       # - schema-registry
