@@ -55,7 +55,7 @@ class MinioHook:
         try:
             for root, _, files in os.walk(folder_path):
                 for file in files:
-                    if file.endswith('.csv'):
+                    
                         print(f"Uploading {file}")
                         local_file_path = os.path.join(root, file)
                         object_name = f"{destination_folder}/{os.path.relpath(local_file_path, folder_path)}"

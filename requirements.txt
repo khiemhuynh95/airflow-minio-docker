@@ -5,8 +5,10 @@ minio
 #kafka
 confluent-kafka==2.1.1
 apache-airflow-providers-apache-kafka==1.0.0
-#spark
-pyspark
+
+pyspark==3.3.2
+delta-spark==2.3.0
+
 
 bs4
 scikit-learn==0.24.2
